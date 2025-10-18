@@ -4,6 +4,7 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import Update
 from groq import Groq
 
 # --- Токены ---
@@ -20,9 +21,9 @@ except Exception as e:
     print(f"⚠️ Ошибка инициализации Groq: {e}")
     client = None
 
+# --- Память диалогов ---
 user_chat_sessions = {}
 
-# --- Главное меню ---
 def main_menu():
     return InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -44,7 +45,6 @@ def back_button():
         [InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="back_to_menu")]
     ])
 
-# --- Команда /start ---
 @dp.message(F.text == "/start")
 async def start_command(message: types.Message):
     photo = FSInputFile("images/sea.jpg")
@@ -59,22 +59,13 @@ async def start_command(message: types.Message):
         reply_markup=main_menu()
     )
 
-# --- Виртуальный менеджер ---
 @dp.callback_query(F.data == "chat_ai")
 async def start_ai_chat(callback: types.CallbackQuery):
     user_chat_sessions[callback.from_user.id] = [
         {"role": "system", "content": (
             "Ты — дружелюбный менеджер турагентства Pick&Travels. "
             "Помогаешь клиентам подобрать туры, рассказываешь про направления, визы, отели и погоду. "
-            "Отвечай тепло, с эмодзи, как хороший тур-менеджер. "
-            "⚠️ Используй только эти официальные контакты агентства: "
-            "📍 Адрес: Ташкент, ул. Аккурган, 22; "
-            "📞 Телефон: +998 97 011 36 29; "
-            "📧 Email: pickandtravell@gmail.com; "
-            "🌐 Сайт: https://www.pick-and-travel.uz; "
-            "👤 Telegram менеджера: https://t.me/azizmarhabatours. "
-            "Если пользователь спрашивает, как связаться, всегда используй эти данные. "
-            "Никогда не придумывай другие телефоны, почты или сайты."
+            "Отвечай тепло, с эмодзи, как хороший тур-менеджер."
         )}
     ]
     await callback.message.answer(
@@ -112,7 +103,7 @@ async def chat_with_ai(message: types.Message):
     except Exception as e:
         await message.answer(f"⚠️ Ошибка при обращении к AI: {e}")
 
-# --- Универсальные функции туров ---
+# --- Категории туров ---
 async def show_tours(callback, tours):
     await callback.answer("⏳ Загружаем лучшие варианты...", show_alert=False)
     for t in tours:
@@ -127,7 +118,6 @@ async def show_tours(callback, tours):
             ])
         )
 
-# --- Тур категории ---
 @dp.callback_query(F.data == "tours_beach")
 async def tours_beach(callback: types.CallbackQuery):
     tours = [
@@ -153,7 +143,6 @@ async def tours_winter(callback: types.CallbackQuery):
     ]
     await show_tours(callback, tours)
 
-# --- Спецпредложения ---
 @dp.callback_query(F.data == "special")
 async def special(callback: types.CallbackQuery):
     await callback.message.answer_photo(
@@ -169,7 +158,6 @@ async def special(callback: types.CallbackQuery):
         ])
     )
 
-# --- Контакты ---
 @dp.callback_query(F.data == "contacts")
 async def contacts(callback: types.CallbackQuery):
     await callback.message.answer(
@@ -186,12 +174,14 @@ async def contacts(callback: types.CallbackQuery):
 async def back_to_menu(callback: types.CallbackQuery):
     await callback.message.answer("🏠 Главное меню 👇", reply_markup=main_menu())
 
-# --- Webhook для Render ---
+# --- Webhook обработчик ---
 async def webhook_handler(request):
     data = await request.json()
-    await dp.feed_update(bot, data)
-    return web.Response()
+    update = Update.model_validate(data)  # ✅ Преобразуем dict → объект Update
+    await dp.feed_update(bot, update)
+    return web.Response(text="ok")
 
+# --- Render конфигурация ---
 async def on_startup(app):
     webhook_url = f"https://pick-travel-bot.onrender.com/{TOKEN}"
     await bot.set_webhook(webhook_url)
@@ -201,6 +191,7 @@ async def on_shutdown(app):
     await bot.delete_webhook()
     print("🛑 Webhook удалён")
 
+# --- Запуск aiohttp ---
 app = web.Application()
 app.router.add_post(f"/{TOKEN}", webhook_handler)
 app.router.add_get("/", lambda request: web.Response(text="Bot is alive!"))
