@@ -1,10 +1,10 @@
 import asyncio
 import os
+import aiohttp
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Update
-from groq import Groq
 
 # --- Токены ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
@@ -14,11 +14,32 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 # --- Groq клиент ---
-try:
-    client = Groq(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
-except Exception as e:
-    print(f"⚠️ Ошибка инициализации Groq: {e}")
-    client = None
+session = None
+
+async def create_groq_chat(messages):
+    """
+    Асинхронный запрос к Groq API.
+    """
+    global session
+    if session is None:
+        session = aiohttp.ClientSession()
+
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": messages
+    }
+
+    async with session.post(url, headers=headers, json=payload) as response:
+        if response.status != 200:
+            text = await response.text()
+            raise Exception(f"Groq API error {response.status}: {text}")
+        data = await response.json()
+        return data["choices"][0]["message"]["content"]
 
 # --- Память диалогов ---
 user_chat_sessions = {}
@@ -90,16 +111,8 @@ async def chat_with_ai(message: types.Message):
 
     user_chat_sessions[user_id].append({"role": "user", "content": message.text})
 
-    if not client:
-        await message.answer("⚠️ AI временно недоступен. Попробуйте позже.")
-        return
-
     try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=user_chat_sessions[user_id]
-        )
-        reply_text = response.choices[0].message.content
+        reply_text = await create_groq_chat(user_chat_sessions[user_id])
         await message.answer(reply_text)
         user_chat_sessions[user_id].append({"role": "assistant", "content": reply_text})
     except Exception as e:
@@ -192,6 +205,8 @@ async def on_startup(app):
 
 async def on_shutdown(app):
     await bot.delete_webhook()
+    if session:
+        await session.close()
     await bot.session.close()
     print("🛑 Webhook удалён")
 
