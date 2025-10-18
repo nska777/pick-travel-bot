@@ -1,10 +1,10 @@
 import asyncio
+import os
+from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from groq import Groq
-import os
-from aiohttp import web  # 👈 нужно для Render (сервер "держит процесс")
 
 # --- Токены ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
@@ -13,14 +13,13 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# --- Groq клиент с безопасным подключением ---
+# --- Groq клиент ---
 try:
     client = Groq(api_key=GROQ_API_KEY)
 except Exception as e:
     print(f"⚠️ Ошибка инициализации Groq: {e}")
     client = None
 
-# --- Память диалогов пользователей ---
 user_chat_sessions = {}
 
 # --- Главное меню ---
@@ -107,11 +106,9 @@ async def chat_with_ai(message: types.Message):
             model="llama-3.3-70b-versatile",
             messages=user_chat_sessions[user_id]
         )
-
         reply_text = response.choices[0].message.content
         await message.answer(reply_text)
         user_chat_sessions[user_id].append({"role": "assistant", "content": reply_text})
-
     except Exception as e:
         await message.answer(f"⚠️ Ошибка при обращении к AI: {e}")
 
@@ -134,16 +131,16 @@ async def show_tours(callback, tours):
 @dp.callback_query(F.data == "tours_beach")
 async def tours_beach(callback: types.CallbackQuery):
     tours = [
-        {"name": "🇲🇻 Мальдивы — Рай на Земле", "desc": "🏝 Виллы над океаном, всё включено 🍹, SPA 🤿\n💰 <b>$1,299</b> / 7 ночей", "photo": "images/maldives.jpg"},
-        {"name": "🇹🇭 Таиланд — Энергия Азии", "desc": "🌅 Пхукет, Самуи, Пхи-Пхи 🏝️\n💰 <b>$899</b> / 10 дней", "photo": "images/thailand.jpg"},
-        {"name": "🇪🇬 Египет — Солнце и история", "desc": "🐪 Хургада, яхты, сафари 🏺\n💰 <b>$499</b> / неделя", "photo": "images/egypt.jpg"}
+        {"name": "🇲🇻 Мальдивы — Рай на Земле", "desc": "🏝 Всё включено 🍹, SPA 🤿\n💰 <b>$1,299</b> / 7 ночей", "photo": "images/maldives.jpg"},
+        {"name": "🇹🇭 Таиланд — Энергия Азии", "desc": "🌅 Пхукет, Самуи 🏝️\n💰 <b>$899</b> / 10 дней", "photo": "images/thailand.jpg"},
+        {"name": "🇪🇬 Египет — Солнце и история", "desc": "🐪 Хургада, сафари 🏺\n💰 <b>$499</b> / неделя", "photo": "images/egypt.jpg"}
     ]
     await show_tours(callback, tours)
 
 @dp.callback_query(F.data == "tours_excursion")
 async def tours_excursion(callback: types.CallbackQuery):
     tours = [
-        {"name": "🇮🇹 Италия — История и романтика", "desc": "🍕 Рим, Венеция, Флоренция 🚤\n💰 <b>$1,199</b> / 9 дней", "photo": "images/italy.jpg"},
+        {"name": "🇮🇹 Италия — Рим и Венеция", "desc": "🍕 История, романтика 🚤\n💰 <b>$1,199</b> / 9 дней", "photo": "images/italy.jpg"},
         {"name": "🇫🇷 Франция — Париж и Лазурный берег", "desc": "🗼 Эйфелева башня, Лувр 🎨\n💰 <b>$1,399</b> / 8 дней", "photo": "images/france.jpg"}
     ]
     await show_tours(callback, tours)
@@ -151,8 +148,8 @@ async def tours_excursion(callback: types.CallbackQuery):
 @dp.callback_query(F.data == "tours_winter")
 async def tours_winter(callback: types.CallbackQuery):
     tours = [
-        {"name": "🇨🇭 Швейцария — Альпийская сказка", "desc": "⛷ Церматт, Давос, трансфер 🚐\n💰 <b>$1,499</b> / 8 дней", "photo": "images/switzerland.jpg"},
-        {"name": "🇦🇹 Австрия — Горнолыжный рай", "desc": "🎿 Инсбрук, Кицбюэль, глинтвейн 🍷\n💰 <b>$1,099</b> / 7 дней", "photo": "images/austria.jpg"}
+        {"name": "🇨🇭 Швейцария — Альпы", "desc": "⛷ Церматт, Давос 🚐\n💰 <b>$1,499</b> / 8 дней", "photo": "images/switzerland.jpg"},
+        {"name": "🇦🇹 Австрия — Горнолыжный рай", "desc": "🎿 Инсбрук, глинтвейн 🍷\n💰 <b>$1,099</b> / 7 дней", "photo": "images/austria.jpg"}
     ]
     await show_tours(callback, tours)
 
@@ -185,25 +182,31 @@ async def contacts(callback: types.CallbackQuery):
         reply_markup=back_button()
     )
 
-# --- Назад ---
 @dp.callback_query(F.data == "back_to_menu")
 async def back_to_menu(callback: types.CallbackQuery):
     await callback.message.answer("🏠 Главное меню 👇", reply_markup=main_menu())
 
-# --- Запуск ---
-async def main():
-    print("✅ Pick&Travels Bot запущен на Render и готов принимать команды!")
-    await dp.start_polling(bot)
+# --- Webhook для Render ---
+async def webhook_handler(request):
+    data = await request.json()
+    await dp.feed_update(bot, data)
+    return web.Response()
 
-# --- Для Render нужен "web-сервер", чтобы бот не завершался ---
-async def render_keep_alive(request):
-    return web.Response(text="Bot is alive!")
+async def on_startup(app):
+    webhook_url = f"https://pick-travel-bot.onrender.com/{TOKEN}"
+    await bot.set_webhook(webhook_url)
+    print(f"✅ Webhook установлен: {webhook_url}")
+
+async def on_shutdown(app):
+    await bot.delete_webhook()
+    print("🛑 Webhook удалён")
+
+app = web.Application()
+app.router.add_post(f"/{TOKEN}", webhook_handler)
+app.router.add_get("/", lambda request: web.Response(text="Bot is alive!"))
+
+app.on_startup.append(on_startup)
+app.on_shutdown.append(on_shutdown)
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.create_task(main())
-
-    app = web.Application()
-    app.router.add_get("/", render_keep_alive)
-
     web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
