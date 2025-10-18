@@ -3,8 +3,7 @@ import os
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
-from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.types import Update
+from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from groq import Groq
 
 # --- Токены ---
@@ -45,6 +44,7 @@ def back_button():
         [InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="back_to_menu")]
     ])
 
+# --- Команда /start ---
 @dp.message(F.text == "/start")
 async def start_command(message: types.Message):
     photo = FSInputFile("images/sea.jpg")
@@ -59,6 +59,7 @@ async def start_command(message: types.Message):
         reply_markup=main_menu()
     )
 
+# --- AI чат ---
 @dp.callback_query(F.data == "chat_ai")
 async def start_ai_chat(callback: types.CallbackQuery):
     user_chat_sessions[callback.from_user.id] = [
@@ -103,7 +104,7 @@ async def chat_with_ai(message: types.Message):
     except Exception as e:
         await message.answer(f"⚠️ Ошибка при обращении к AI: {e}")
 
-# --- Категории туров ---
+# --- Показ туров ---
 async def show_tours(callback, tours):
     await callback.answer("⏳ Загружаем лучшие варианты...", show_alert=False)
     for t in tours:
@@ -118,6 +119,7 @@ async def show_tours(callback, tours):
             ])
         )
 
+# --- Категории ---
 @dp.callback_query(F.data == "tours_beach")
 async def tours_beach(callback: types.CallbackQuery):
     tours = [
@@ -177,7 +179,7 @@ async def back_to_menu(callback: types.CallbackQuery):
 # --- Webhook обработчик ---
 async def webhook_handler(request):
     data = await request.json()
-    update = Update.model_validate(data)  # ✅ Преобразуем dict → объект Update
+    update = Update.model_validate(data)
     await dp.feed_update(bot, update)
     return web.Response(text="ok")
 
@@ -189,6 +191,7 @@ async def on_startup(app):
 
 async def on_shutdown(app):
     await bot.delete_webhook()
+    await bot.session.close()  # ✅ важно!
     print("🛑 Webhook удалён")
 
 # --- Запуск aiohttp ---
