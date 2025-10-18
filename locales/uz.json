@@ -1,0 +1,11 @@
+{
+  "start_message": "Assalomu alaykum! 🌍 Pick&Travel botiga xush kelibsiz!",
+  "choose_language": "Iltimos, tilni tanlang:",
+  "menu": {
+    "tours": "🌴 Turlar",
+    "booking": "📅 Buyurtma berish",
+    "contacts": "📞 Aloqa",
+    "about": "ℹ️ Kompaniya haqida"
+  },
+  "tours_list": "Bizning eng mashhur turlarimiz:"
+}

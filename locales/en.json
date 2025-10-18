@@ -1,0 +1,11 @@
+{
+  "start_message": "Hello! 🌍 Welcome to Pick&Travel bot!",
+  "choose_language": "Please select a language:",
+  "menu": {
+    "tours": "🌴 Tours",
+    "booking": "📅 Booking",
+    "contacts": "📞 Contacts",
+    "about": "ℹ️ About Us"
+  },
+  "tours_list": "Our popular tours:"
+}
