@@ -51,6 +51,7 @@ async def start_command(message: types.Message):
 # --- Менеджер (временно отключен) ---
 @dp.callback_query(F.data == "chat_ai")
 async def chat_ai_unavailable(callback: types.CallbackQuery):
+    await callback.answer()  # сразу отвечаем, чтобы избежать "query is too old"
     await callback.message.answer(
         "⚠️ Виртуальный менеджер временно недоступен.\n"
         "Пожалуйста, попробуйте позже 🙏",
@@ -60,7 +61,14 @@ async def chat_ai_unavailable(callback: types.CallbackQuery):
 
 # --- Показ туров ---
 async def show_tours(callback, tours):
-    await callback.answer("⏳ Загружаем лучшие варианты...", show_alert=False)
+    # Сразу отвечаем, чтобы избежать Telegram timeout
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+    await callback.message.answer("⏳ Загружаем лучшие варианты...", reply_markup=back_button())
+
     for t in tours:
         photo = FSInputFile(t["photo"])
         await callback.message.answer_photo(
@@ -101,6 +109,7 @@ async def tours_winter(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "special")
 async def special(callback: types.CallbackQuery):
+    await callback.answer()
     await callback.message.answer_photo(
         FSInputFile("images/special.jpg"),
         caption=("🎁 <b>ГОРЯЧЕЕ ПРЕДЛОЖЕНИЕ</b>\n\n"
@@ -116,6 +125,7 @@ async def special(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "contacts")
 async def contacts(callback: types.CallbackQuery):
+    await callback.answer()
     await callback.message.answer(
         "📍 <b>Офис:</b> Ташкент, ул. Аккурган, 22\n"
         "📞 +998 97 011 36 29\n"
@@ -128,6 +138,7 @@ async def contacts(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "back_to_menu")
 async def back_to_menu(callback: types.CallbackQuery):
+    await callback.answer()
     await callback.message.answer("🏠 Главное меню 👇", reply_markup=main_menu())
 
 # --- Webhook обработчик ---
