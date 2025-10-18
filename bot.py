@@ -1,14 +1,8 @@
-import asyncio
 import os
-import logging
-from aiohttp import web, ClientSession
+from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Update
-
-# --- Логирование ---
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # --- Токен ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
@@ -27,7 +21,6 @@ def main_menu():
             InlineKeyboardButton(text="🔥 Акции 🎁", callback_data="special")
         ],
         [
-            InlineKeyboardButton(text="💬 Менеджер 🤖", callback_data="chat_ai"),
             InlineKeyboardButton(text="📞 Контакты 💬", callback_data="contacts")
         ]
     ])
@@ -40,35 +33,23 @@ def back_button():
 # --- Команда /start ---
 @dp.message(F.text == "/start")
 async def start_command(message: types.Message):
-    logger.info(f"Пользователь {message.from_user.id} запустил бота")
     photo = FSInputFile("images/sea.jpg")
     await message.answer_photo(
         photo=photo,
         caption=(
             "<b>🌴 Добро пожаловать в Pick&Travels Tours!</b>\n\n"
             "🏖 У нас лучшие туры по всему миру — от Мальдив до Альп!\n"
-            "Выберите направление или свяжитесь с менеджером ✈️"
+            "Выберите направление и отправляйтесь в путешествие ✈️"
         ),
         parse_mode=ParseMode.HTML,
         reply_markup=main_menu()
     )
 
-# --- Менеджер (временно отключен) ---
-@dp.callback_query(F.data == "chat_ai")
-async def chat_ai_unavailable(callback: types.CallbackQuery):
-    await callback.answer()
-    await callback.message.answer(
-        "⚠️ Виртуальный менеджер временно недоступен.\n"
-        "Пожалуйста, попробуйте позже 🙏",
-        parse_mode=ParseMode.HTML
-    )
-    await callback.message.answer("🏠 Главное меню 👇", reply_markup=main_menu())
-
 # --- Показ туров ---
 async def show_tours(callback, tours):
     try:
         await callback.answer()
-    except Exception:
+    except:
         pass
 
     await callback.message.answer("⏳ Загружаем лучшие варианты...", reply_markup=back_button())
@@ -147,37 +128,21 @@ async def back_to_menu(callback: types.CallbackQuery):
 
 # --- Webhook обработчик ---
 async def webhook_handler(request):
-    try:
-        data = await request.json()
-        update = Update.model_validate(data)
-        await dp.feed_update(bot, update)
-    except Exception as e:
-        logger.error(f"Ошибка при обработке webhook: {e}")
+    data = await request.json()
+    update = Update.model_validate(data)
+    await dp.feed_update(bot, update)
     return web.Response(text="ok")
-
-# --- Пинг Render (чтобы не засыпал) ---
-async def keep_alive():
-    url = f"https://pick-travel-bot.onrender.com/"
-    while True:
-        try:
-            async with ClientSession() as session:
-                async with session.get(url) as resp:
-                    logger.info(f"Ping status: {resp.status}")
-        except Exception as e:
-            logger.warning(f"Ошибка при пинге: {e}")
-        await asyncio.sleep(25)
 
 # --- Render конфигурация ---
 async def on_startup(app):
     webhook_url = f"https://pick-travel-bot.onrender.com/{TOKEN}"
     await bot.set_webhook(webhook_url)
-    logger.info(f"✅ Webhook установлен: {webhook_url}")
-    asyncio.create_task(keep_alive())
+    print(f"✅ Webhook установлен: {webhook_url}")
 
 async def on_shutdown(app):
     await bot.delete_webhook()
     await bot.session.close()
-    logger.info("🛑 Webhook удалён")
+    print("🛑 Webhook удалён")
 
 # --- Запуск aiohttp ---
 app = web.Application()
