@@ -1,48 +1,15 @@
 import asyncio
 import os
-import aiohttp
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Update
 
-# --- Токены ---
+# --- Токен ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
-
-# --- Groq клиент ---
-session = None
-
-async def create_groq_chat(messages):
-    """
-    Асинхронный запрос к Groq API.
-    """
-    global session
-    if session is None:
-        session = aiohttp.ClientSession()
-
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": messages
-    }
-
-    async with session.post(url, headers=headers, json=payload) as response:
-        if response.status != 200:
-            text = await response.text()
-            raise Exception(f"Groq API error {response.status}: {text}")
-        data = await response.json()
-        return data["choices"][0]["message"]["content"]
-
-# --- Память диалогов ---
-user_chat_sessions = {}
 
 # --- Главное меню ---
 def main_menu():
@@ -75,48 +42,21 @@ async def start_command(message: types.Message):
         caption=(
             "<b>🌴 Добро пожаловать в Pick&Travels Tours!</b>\n\n"
             "🏖 У нас лучшие туры по всему миру — от Мальдив до Альп!\n"
-            "Выберите направление или пообщайтесь с нашим виртуальным менеджером ✈️"
+            "Выберите направление или свяжитесь с менеджером ✈️"
         ),
         parse_mode=ParseMode.HTML,
         reply_markup=main_menu()
     )
 
-# --- AI чат ---
+# --- Менеджер (временно отключен) ---
 @dp.callback_query(F.data == "chat_ai")
-async def start_ai_chat(callback: types.CallbackQuery):
-    user_chat_sessions[callback.from_user.id] = [
-        {"role": "system", "content": (
-            "Ты — дружелюбный менеджер турагентства Pick&Travels. "
-            "Помогаешь клиентам подобрать туры, рассказываешь про направления, визы, отели и погоду. "
-            "Отвечай тепло, с эмодзи, как хороший тур-менеджер."
-        )}
-    ]
+async def chat_ai_unavailable(callback: types.CallbackQuery):
     await callback.message.answer(
-        "💬 Вы подключены к виртуальному менеджеру Pick&Travels!\n"
-        "Можете спросить про туры, визы, страны или погоду ☀️\n\n"
-        "Чтобы выйти, напишите <b>назад</b>.",
+        "⚠️ Виртуальный менеджер временно недоступен.\n"
+        "Пожалуйста, попробуйте позже 🙏",
         parse_mode=ParseMode.HTML
     )
-
-@dp.message()
-async def chat_with_ai(message: types.Message):
-    user_id = message.from_user.id
-    if user_id not in user_chat_sessions:
-        return
-
-    if message.text.lower() in ["назад", "выйти", "меню"]:
-        del user_chat_sessions[user_id]
-        await message.answer("🏠 Возврат в главное меню 👇", reply_markup=main_menu())
-        return
-
-    user_chat_sessions[user_id].append({"role": "user", "content": message.text})
-
-    try:
-        reply_text = await create_groq_chat(user_chat_sessions[user_id])
-        await message.answer(reply_text)
-        user_chat_sessions[user_id].append({"role": "assistant", "content": reply_text})
-    except Exception as e:
-        await message.answer(f"⚠️ Ошибка при обращении к AI: {e}")
+    await callback.message.answer("🏠 Главное меню 👇", reply_markup=main_menu())
 
 # --- Показ туров ---
 async def show_tours(callback, tours):
@@ -205,8 +145,6 @@ async def on_startup(app):
 
 async def on_shutdown(app):
     await bot.delete_webhook()
-    if session:
-        await session.close()
     await bot.session.close()
     print("🛑 Webhook удалён")
 
