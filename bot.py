@@ -1,13 +1,17 @@
 import asyncio
 import os
-from aiohttp import web
+import logging
+from aiohttp import web, ClientSession
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Update
 
+# --- Логирование ---
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # --- Токен ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
-
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
@@ -36,6 +40,7 @@ def back_button():
 # --- Команда /start ---
 @dp.message(F.text == "/start")
 async def start_command(message: types.Message):
+    logger.info(f"Пользователь {message.from_user.id} запустил бота")
     photo = FSInputFile("images/sea.jpg")
     await message.answer_photo(
         photo=photo,
@@ -51,7 +56,7 @@ async def start_command(message: types.Message):
 # --- Менеджер (временно отключен) ---
 @dp.callback_query(F.data == "chat_ai")
 async def chat_ai_unavailable(callback: types.CallbackQuery):
-    await callback.answer()  # сразу отвечаем, чтобы избежать "query is too old"
+    await callback.answer()
     await callback.message.answer(
         "⚠️ Виртуальный менеджер временно недоступен.\n"
         "Пожалуйста, попробуйте позже 🙏",
@@ -61,7 +66,6 @@ async def chat_ai_unavailable(callback: types.CallbackQuery):
 
 # --- Показ туров ---
 async def show_tours(callback, tours):
-    # Сразу отвечаем, чтобы избежать Telegram timeout
     try:
         await callback.answer()
     except Exception:
@@ -143,21 +147,37 @@ async def back_to_menu(callback: types.CallbackQuery):
 
 # --- Webhook обработчик ---
 async def webhook_handler(request):
-    data = await request.json()
-    update = Update.model_validate(data)
-    await dp.feed_update(bot, update)
+    try:
+        data = await request.json()
+        update = Update.model_validate(data)
+        await dp.feed_update(bot, update)
+    except Exception as e:
+        logger.error(f"Ошибка при обработке webhook: {e}")
     return web.Response(text="ok")
+
+# --- Пинг Render (чтобы не засыпал) ---
+async def keep_alive():
+    url = f"https://pick-travel-bot.onrender.com/"
+    while True:
+        try:
+            async with ClientSession() as session:
+                async with session.get(url) as resp:
+                    logger.info(f"Ping status: {resp.status}")
+        except Exception as e:
+            logger.warning(f"Ошибка при пинге: {e}")
+        await asyncio.sleep(25)
 
 # --- Render конфигурация ---
 async def on_startup(app):
     webhook_url = f"https://pick-travel-bot.onrender.com/{TOKEN}"
     await bot.set_webhook(webhook_url)
-    print(f"✅ Webhook установлен: {webhook_url}")
+    logger.info(f"✅ Webhook установлен: {webhook_url}")
+    asyncio.create_task(keep_alive())
 
 async def on_shutdown(app):
     await bot.delete_webhook()
     await bot.session.close()
-    print("🛑 Webhook удалён")
+    logger.info("🛑 Webhook удалён")
 
 # --- Запуск aiohttp ---
 app = web.Application()
