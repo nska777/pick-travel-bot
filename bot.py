@@ -15,7 +15,7 @@ dp = Dispatcher()
 
 # --- Groq клиент ---
 try:
-    client = Groq(api_key=GROQ_API_KEY)
+    client = Groq(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
 except Exception as e:
     print(f"⚠️ Ошибка инициализации Groq: {e}")
     client = None
@@ -23,6 +23,7 @@ except Exception as e:
 # --- Память диалогов ---
 user_chat_sessions = {}
 
+# --- Главное меню ---
 def main_menu():
     return InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -191,7 +192,7 @@ async def on_startup(app):
 
 async def on_shutdown(app):
     await bot.delete_webhook()
-    await bot.session.close()  # ✅ важно!
+    await bot.session.close()
     print("🛑 Webhook удалён")
 
 # --- Запуск aiohttp ---
