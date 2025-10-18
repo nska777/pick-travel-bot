@@ -4,6 +4,7 @@ from aiogram.enums import ParseMode
 from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from groq import Groq
 import os
+from aiohttp import web  # 👈 нужно для Render (сервер "держит процесс")
 
 # --- Токены ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
@@ -11,7 +12,13 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
-client = Groq(api_key=GROQ_API_KEY)
+
+# --- Groq клиент с безопасным подключением ---
+try:
+    client = Groq(api_key=GROQ_API_KEY)
+except Exception as e:
+    print(f"⚠️ Ошибка инициализации Groq: {e}")
+    client = None
 
 # --- Память диалогов пользователей ---
 user_chat_sessions = {}
@@ -33,7 +40,6 @@ def main_menu():
         ]
     ])
 
-# --- Кнопка Назад ---
 def back_button():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="back_to_menu")]
@@ -82,8 +88,6 @@ async def start_ai_chat(callback: types.CallbackQuery):
 @dp.message()
 async def chat_with_ai(message: types.Message):
     user_id = message.from_user.id
-
-    # Если пользователь не в чате с ИИ — игнор
     if user_id not in user_chat_sessions:
         return
 
@@ -94,9 +98,13 @@ async def chat_with_ai(message: types.Message):
 
     user_chat_sessions[user_id].append({"role": "user", "content": message.text})
 
+    if not client:
+        await message.answer("⚠️ AI временно недоступен. Попробуйте позже.")
+        return
+
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",  # ✅ актуальная модель
+            model="llama-3.3-70b-versatile",
             messages=user_chat_sessions[user_id]
         )
 
@@ -107,7 +115,7 @@ async def chat_with_ai(message: types.Message):
     except Exception as e:
         await message.answer(f"⚠️ Ошибка при обращении к AI: {e}")
 
-# --- Универсальный метод для показа туров ---
+# --- Универсальные функции туров ---
 async def show_tours(callback, tours):
     await callback.answer("⏳ Загружаем лучшие варианты...", show_alert=False)
     for t in tours:
@@ -177,15 +185,25 @@ async def contacts(callback: types.CallbackQuery):
         reply_markup=back_button()
     )
 
-# --- Назад в меню ---
+# --- Назад ---
 @dp.callback_query(F.data == "back_to_menu")
 async def back_to_menu(callback: types.CallbackQuery):
     await callback.message.answer("🏠 Главное меню 👇", reply_markup=main_menu())
 
 # --- Запуск ---
 async def main():
-    print("✅ Бот Pick&Travels запущен и работает с AI-менеджером (Groq LLaMA 3.3)...")
+    print("✅ Pick&Travels Bot запущен на Render и готов принимать команды!")
     await dp.start_polling(bot)
 
+# --- Для Render нужен "web-сервер", чтобы бот не завершался ---
+async def render_keep_alive(request):
+    return web.Response(text="Bot is alive!")
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    loop = asyncio.get_event_loop()
+    loop.create_task(main())
+
+    app = web.Application()
+    app.router.add_get("/", render_keep_alive)
+
+    web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
